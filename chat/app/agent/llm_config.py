@@ -97,10 +97,23 @@ def _message(role: str, text: str) -> Dict[str, Any]:
 
 
 def _collect_text(response: Any) -> str:
+    if response is None:
+        return ""
+
+    output_text = getattr(response, "output_text", None)
+    if isinstance(output_text, str):
+        return output_text.strip()
+    if output_text and isinstance(output_text, Iterable):
+        combined = "".join(str(part) for part in output_text if part)
+        if combined:
+            return combined.strip()
+
     parts: List[str] = []
     output_items = getattr(response, "output", []) or []
     for item in output_items:
-        item_type = getattr(item, "type", None) or getattr(item, "get", lambda *_: None)("type")
+        item_type = getattr(item, "type", None) or getattr(
+            item, "get", lambda *_: None
+        )("type")
         if item_type == "message":
             content = getattr(item, "content", None) or []
             for block in content:
