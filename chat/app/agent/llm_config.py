@@ -3,7 +3,7 @@ import logging
 import os
 from typing import Any, Dict, Iterable, List, Optional
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, OpenAIError
 
 logger = logging.getLogger(__name__)
 
@@ -97,10 +97,23 @@ def _message(role: str, text: str) -> Dict[str, Any]:
 
 
 def _collect_text(response: Any) -> str:
+    if response is None:
+        return ""
+
+    output_text = getattr(response, "output_text", None)
+    if isinstance(output_text, str):
+        return output_text.strip()
+    if output_text and isinstance(output_text, Iterable):
+        combined = "".join(str(part) for part in output_text if part)
+        if combined:
+            return combined.strip()
+
     parts: List[str] = []
     output_items = getattr(response, "output", []) or []
     for item in output_items:
-        item_type = getattr(item, "type", None) or getattr(item, "get", lambda *_: None)("type")
+        item_type = getattr(item, "type", None) or getattr(
+            item, "get", lambda *_: None
+        )("type")
         if item_type == "message":
             content = getattr(item, "content", None) or []
             for block in content:
@@ -112,9 +125,24 @@ def _collect_text(response: Any) -> str:
     return "".join(parts).strip()
 
 
+class AgentExecutionError(RuntimeError):
+    """Raised when the underlying LLM request fails."""
+
+
 class ProcurementAgent:
     def __init__(self) -> None:
-        self._client = AsyncOpenAI()
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            logger.error(
+                "OPENAI_API_KEY environment variable is not set. "
+                "Set it to a valid API key before starting the chat service."
+            )
+            raise RuntimeError(
+                "Missing OPENAI_API_KEY environment variable. "
+                "Please export your OpenAI API key before running the app."
+            )
+
+        self._client = AsyncOpenAI(api_key=api_key)
         self._default_model = os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
         self._base_tools = _build_tools()
 
@@ -164,7 +192,7 @@ class ProcurementAgent:
         temperature: Optional[float],
     ) -> str:
         inputs = self._compose_conversation(messages)
-        response = await self._client.responses.create(
+        response = await self._responses_create(
             model=model,
             input=inputs,
             tools=self._base_tools,
@@ -173,7 +201,7 @@ class ProcurementAgent:
         return _collect_text(response)
 
     async def _route_intent(self, user_text: str, model: str) -> Dict[str, Any]:
-        response = await self._client.responses.create(
+        response = await self._responses_create(
             model=model,
             input=[
                 _message(
@@ -205,7 +233,7 @@ class ProcurementAgent:
         user_text: str,
         model: str,
     ) -> str:
-        response = await self._client.responses.create(
+        response = await self._responses_create(
             model=model,
             input=[
                 _message("system", SYSTEM_PROMPT),
@@ -239,6 +267,8 @@ class ProcurementAgent:
             logger.warning("Plan generation returned invalid JSON: %s", text)
             return plan_md + "- Review publicly available information\n"
         steps = data.get("steps") or []
+        if isinstance(steps, (str, bytes)):
+            steps = [steps]
         if not isinstance(steps, Iterable):
             steps = [str(steps)]
         for step in steps:
@@ -253,7 +283,7 @@ class ProcurementAgent:
         model: str,
         temperature: Optional[float],
     ) -> str:
-        response = await self._client.responses.create(
+        response = await self._responses_create(
             model=model,
             input=[
                 _message("system", SYSTEM_PROMPT + "\n\n" + SPECIAL_INVESTIGATION_PROMPT),
@@ -298,6 +328,13 @@ class ProcurementAgent:
                     return content
                 return str(content)
         return None
+
+    async def _responses_create(self, **kwargs: Any) -> Any:
+        try:
+            return await self._client.responses.create(**kwargs)
+        except OpenAIError as exc:  # pragma: no cover - network failure
+            logger.error("OpenAI API request failed: %s", exc)
+            raise AgentExecutionError(str(exc)) from exc
 
 
 def get_agent() -> ProcurementAgent:

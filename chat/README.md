@@ -28,7 +28,8 @@ An interactive chat application powered by FastAPI, LangChain, and LangGraph. Th
 
 Environment variables:
 
-- `OPENAI_API_KEY` – required.
+- `OPENAI_API_KEY` – required. The backend now checks this variable on startup and
+  exits with a clear error message if it is missing.
 - `OPENAI_MODEL` – optional; defaults to `gpt-4.1-mini`.
 - `OPENAI_PROCUREMENT_VECTOR_STORE_ID` – optional OpenAI vector store ID for ingesting procurement documents the agent can search via `file_search`.
 - `CORS_ALLOW_ORIGINS` – comma-separated origins allowed for cross-origin requests, default `*`.
