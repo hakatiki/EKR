@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chat Table Viewer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="workspace">
+      <div class="workspace-grid">
+        <section class="chat-panel">
+          <header class="panel-header">
+            <span class="panel-label">1</span>
+            <div>
+              <h1>Chat</h1>
+              <p class="subtitle">Compose prompts and review replies in the conversation stream.</p>
+            </div>
+          </header>
+          <div id="chat-log" class="chat-log"></div>
+          <form id="chat-form" class="chat-form">
+            <textarea
+              id="chat-input"
+              name="message"
+              rows="2"
+              placeholder="Ask for data or analysis..."
+              required
+            ></textarea>
+            <div class="form-meta">
+              <span class="hint">Shift ⏎ to add a new line</span>
+              <button type="submit" id="send-button">Send</button>
+            </div>
+          </form>
+        </section>
+
+        <div class="divider-handle" id="divider-handle" role="separator" aria-orientation="vertical" aria-label="Adjust chat width"></div>
+
+        <section class="data-panel">
+          <header class="panel-header">
+            <span class="panel-label">2</span>
+            <div>
+              <h2>Data Canvas</h2>
+              <p class="subtitle">Markdown tables render into navigable tabs.</p>
+            </div>
+          </header>
+          <div id="table-tabs" class="table-tabs"></div>
+          <div id="table-container" class="table-container">
+            <div class="empty-state">
+              <h3>No tables yet</h3>
+              <p>When the assistant shares a Markdown table, it will render here.</p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.7/dist/purify.min.js"></script>
+    <script src="/static/app.js" type="module"></script>
+  </body>
+</html>
+
