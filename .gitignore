@@ -1,4 +1,53 @@
-/.venv
-/data
-/docs
-/scripts
+.venv/
+env/
+venv/
+ENV/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+*.egg
+build/
+dist/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Node / frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+dist/
+.parcel-cache/
+
+# Environment & secrets
+.env
+.env.*
+*.env
+
+# Data and large exports
+data/
+
+# Project local docs/scripts outputs
+docs/
+scripts/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Python tooling caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.cover
+*.log
