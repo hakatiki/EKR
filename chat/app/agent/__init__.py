@@ -1,6 +1,6 @@
-"""Procurement investigation agent using LangChain and LangGraph."""
+"""Procurement investigation agent without LangChain/LangGraph."""
 
-from .app_graph import get_agent_app
+from .llm_config import get_agent
 
-__all__ = ["get_agent_app"]
+__all__ = ["get_agent"]
 

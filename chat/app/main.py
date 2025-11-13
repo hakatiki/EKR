@@ -1,15 +1,13 @@
-import logging
 import os
 import uuid
 from pathlib import Path
-from typing import AsyncIterator, Iterable, List, Optional
+from typing import AsyncIterator, List, Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -19,12 +17,9 @@ INDEX_FILE = STATIC_DIR / "index.html"
 load_dotenv(BASE_DIR / ".env")
 load_dotenv(override=False)
 
-from .agent import get_agent_app
+from .agent import get_agent
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
-agent_app = get_agent_app()
+agent = get_agent()
 
 
 class ChatMessage(BaseModel):
@@ -45,38 +40,8 @@ class ChatRequest(BaseModel):
     )
     thread_id: Optional[str] = Field(
         default=None,
-        description="Conversation thread identifier to reuse LangGraph checkpoints.",
+        description="Conversation thread identifier (currently unused).",
     )
-
-
-def _to_langchain_message(message: ChatMessage) -> BaseMessage:
-    role = message.role.lower()
-    if role == "user":
-        return HumanMessage(content=message.content)
-    if role == "assistant":
-        return AIMessage(content=message.content)
-    if role == "system":
-        return SystemMessage(content=message.content)
-    raise ValueError(f"Unsupported message role: {message.role}")
-
-
-def _extract_text_from_message(message: BaseMessage) -> str:
-    content = getattr(message, "content", "")
-    if isinstance(content, str):
-        return content
-    if isinstance(content, Iterable):
-        parts = []
-        for block in content:
-            if isinstance(block, dict):
-                text = block.get("text")
-                if text:
-                    parts.append(text)
-            else:
-                text = getattr(block, "text", None)
-                if text:
-                    parts.append(text)
-        return "".join(parts)
-    return str(content)
 
 
 def create_app() -> FastAPI:
@@ -105,37 +70,30 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail="Messages cannot be empty.")
 
         try:
-            lc_messages = [_to_langchain_message(msg) for msg in request.messages]
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-        thread_id = request.thread_id or str(uuid.uuid4())
+            message_payload = [
+                {"role": msg.role, "content": msg.content} for msg in request.messages
+            ]
+        except Exception as exc:  # pragma: no cover - defensive logging
+            raise HTTPException(
+                status_code=400, detail=f"Invalid message format: {exc}"
+            ) from exc
 
         try:
-            result = await agent_app.ainvoke(
-                {"messages": lc_messages},
-                config={"configurable": {"thread_id": thread_id}},
+            thread_id = request.thread_id or str(uuid.uuid4())
+            _ = thread_id  # placeholder for future memory integration
+            response_text = await agent.generate_reply(
+                message_payload,
+                model=request.model,
+                temperature=request.temperature,
             )
+        except HTTPException:
+            raise
         except Exception as exc:  # pragma: no cover - defensive logging
-            logger.exception("Agent execution failed")
             raise HTTPException(
                 status_code=500, detail="Agent execution failed."
             ) from exc
 
-        response_message = None
-        for message in reversed(result.get("messages", [])):
-            if isinstance(message, AIMessage):
-                response_message = message
-                break
-
-        if response_message is None:
-            raise HTTPException(
-                status_code=500, detail="Agent did not return a response."
-            )
-
-        response_text = _extract_text_from_message(response_message).strip()
-        if not response_text:
-            response_text = ""
+        response_text = (response_text or "").strip()
 
         async def iterator() -> AsyncIterator[str]:
             yield response_text
