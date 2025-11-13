@@ -258,8 +258,30 @@ async function sendMessage(event) {
       body: JSON.stringify({ messages: payloadMessages }),
     });
 
-    if (!response.ok || !response.body) {
-      throw new Error(`Request failed with status ${response.status}`);
+    if (!response.ok) {
+      let errorMessage = `Request failed with status ${response.status}`;
+      try {
+        const data = await response.clone().json();
+        const detail = data?.detail ?? data?.message;
+        if (detail) {
+          errorMessage += `: ${detail}`;
+        }
+      } catch (jsonError) {
+        console.warn("Unable to parse error JSON", jsonError);
+        try {
+          const text = await response.text();
+          if (text) {
+            errorMessage += `: ${text}`;
+          }
+        } catch (textError) {
+          console.warn("Unable to read error body", textError);
+        }
+      }
+      throw new Error(errorMessage);
+    }
+
+    if (!response.body) {
+      throw new Error("Server response did not include a stream.");
     }
 
     const reader = response.body.getReader();

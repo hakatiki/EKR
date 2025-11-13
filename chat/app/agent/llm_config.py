@@ -3,7 +3,7 @@ import logging
 import os
 from typing import Any, Dict, Iterable, List, Optional
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, OpenAIError
 
 logger = logging.getLogger(__name__)
 
@@ -112,9 +112,24 @@ def _collect_text(response: Any) -> str:
     return "".join(parts).strip()
 
 
+class AgentExecutionError(RuntimeError):
+    """Raised when the underlying LLM request fails."""
+
+
 class ProcurementAgent:
     def __init__(self) -> None:
-        self._client = AsyncOpenAI()
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            logger.error(
+                "OPENAI_API_KEY environment variable is not set. "
+                "Set it to a valid API key before starting the chat service."
+            )
+            raise RuntimeError(
+                "Missing OPENAI_API_KEY environment variable. "
+                "Please export your OpenAI API key before running the app."
+            )
+
+        self._client = AsyncOpenAI(api_key=api_key)
         self._default_model = os.environ.get("OPENAI_MODEL", "gpt-4.1-mini")
         self._base_tools = _build_tools()
 
@@ -164,7 +179,7 @@ class ProcurementAgent:
         temperature: Optional[float],
     ) -> str:
         inputs = self._compose_conversation(messages)
-        response = await self._client.responses.create(
+        response = await self._responses_create(
             model=model,
             input=inputs,
             tools=self._base_tools,
@@ -173,7 +188,7 @@ class ProcurementAgent:
         return _collect_text(response)
 
     async def _route_intent(self, user_text: str, model: str) -> Dict[str, Any]:
-        response = await self._client.responses.create(
+        response = await self._responses_create(
             model=model,
             input=[
                 _message(
@@ -205,7 +220,7 @@ class ProcurementAgent:
         user_text: str,
         model: str,
     ) -> str:
-        response = await self._client.responses.create(
+        response = await self._responses_create(
             model=model,
             input=[
                 _message("system", SYSTEM_PROMPT),
@@ -255,7 +270,7 @@ class ProcurementAgent:
         model: str,
         temperature: Optional[float],
     ) -> str:
-        response = await self._client.responses.create(
+        response = await self._responses_create(
             model=model,
             input=[
                 _message("system", SYSTEM_PROMPT + "\n\n" + SPECIAL_INVESTIGATION_PROMPT),
@@ -300,6 +315,13 @@ class ProcurementAgent:
                     return content
                 return str(content)
         return None
+
+    async def _responses_create(self, **kwargs: Any) -> Any:
+        try:
+            return await self._client.responses.create(**kwargs)
+        except OpenAIError as exc:  # pragma: no cover - network failure
+            logger.error("OpenAI API request failed: %s", exc)
+            raise AgentExecutionError(str(exc)) from exc
 
 
 def get_agent() -> ProcurementAgent:
