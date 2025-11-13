@@ -1,3 +1,4 @@
+import logging
 import os
 import uuid
 from pathlib import Path
@@ -17,9 +18,11 @@ INDEX_FILE = STATIC_DIR / "index.html"
 load_dotenv(BASE_DIR / ".env")
 load_dotenv(override=False)
 
-from .agent import get_agent
+from .agent import AgentExecutionError, get_agent
 
 agent = get_agent()
+
+logger = logging.getLogger(__name__)
 
 
 class ChatMessage(BaseModel):
@@ -86,9 +89,19 @@ def create_app() -> FastAPI:
                 model=request.model,
                 temperature=request.temperature,
             )
+        except AgentExecutionError as exc:
+            logger.error("LLM request failed: %s", exc)
+            raise HTTPException(
+                status_code=502,
+                detail=f"Language model request failed: {exc}",
+            ) from exc
         except HTTPException:
             raise
+        except ValueError as exc:
+            logger.error("Invalid agent input: %s", exc)
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:  # pragma: no cover - defensive logging
+            logger.exception("Unexpected agent failure")
             raise HTTPException(
                 status_code=500, detail="Agent execution failed."
             ) from exc
