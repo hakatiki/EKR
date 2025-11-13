@@ -239,6 +239,8 @@ class ProcurementAgent:
             logger.warning("Plan generation returned invalid JSON: %s", text)
             return plan_md + "- Review publicly available information\n"
         steps = data.get("steps") or []
+        if isinstance(steps, (str, bytes)):
+            steps = [steps]
         if not isinstance(steps, Iterable):
             steps = [str(steps)]
         for step in steps:
